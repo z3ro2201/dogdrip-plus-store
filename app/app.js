@@ -6,6 +6,11 @@ const blockColor = "f43f5e";
 const grantColor = "16a34a";
 const targetPopupMenuId = "popup_menu_area";
 
+function getTodayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
 // 1. 가림막, 모달, 개드립콘 컨텍스트 메뉴 구조 준비
 const loadingOverlay = document.createElement("div");
 loadingOverlay.id = "ext-loading-overlay";
@@ -227,6 +232,8 @@ function executeFilterWithMinTime() {
         "contentWidth",
         "blockMethod",
         "userMemos",
+        "readabilityMode",
+        "legacyToolbar",
       ],
       (result) => {
         if (chrome.runtime?.lastError) return;
@@ -236,11 +243,19 @@ function executeFilterWithMinTime() {
         const blockedDogconGroups = result.blockedDogconGroups || [];
         const isBlindMode = result.blockMethod === "blind";
         const isBadgeMode = result.blockMethod === "badge";
-        const memos = result.userMemos || {};
+
+        // userMemos: 신버전 array → member_num 기준 Map으로 색인
+        const rawMemos = Array.isArray(result.userMemos)
+          ? result.userMemos
+          : [];
+        const memoMap = new Map(rawMemos.map((m) => [String(m.member_num), m]));
 
         const blockedMemberIds = blockedUsers
           .map((u) => String(u.member_num).trim())
           .filter((id) => id !== "");
+        const blockedUserMap = new Map(
+          blockedUsers.map((u) => [String(u.member_num).trim(), u]),
+        );
 
         const blockedDogconIds = blockedDogcons.map((item) => item.id);
         const blockedDogconGroupIds = blockedDogconGroups.map(
@@ -265,16 +280,18 @@ function executeFilterWithMinTime() {
             htmlEl.classList.add("ext-hide-compact");
           if (result.disableVote === true)
             htmlEl.classList.add("ext-hide-vote");
+          if (result.readabilityMode === true)
+            htmlEl.classList.add("ext-readability-mode");
+          else htmlEl.classList.remove("ext-readability-mode");
+          if (result.legacyToolbar === true)
+            htmlEl.classList.add("ext-legacy-toolbar");
+          else htmlEl.classList.remove("ext-legacy-toolbar");
         }
 
         function getMemoData(mid) {
-          const rawData = memos[mid];
-          if (!rawData) return { text: "", style: "blue" };
-          if (rawData.includes(":")) {
-            const parts = rawData.split(":");
-            return { text: parts[0], style: parts[1] };
-          }
-          return { text: rawData, style: "blue" };
+          const entry = memoMap.get(String(mid));
+          if (!entry) return { text: "", color: "blue" };
+          return { text: entry.memo || "", color: entry.color || "blue" };
         }
 
         // ① 웹진형 레이아웃 필터 (타겟: posts) 💡 [다중 글 독립 배지 마감 완료]
@@ -311,28 +328,27 @@ function executeFilterWithMinTime() {
           }
 
           if (shouldBlind) {
-            if (
-              currentMemberId &&
-              nicknameElement &&
-              !article.querySelector(`.ext-badge-id-${currentMemberId}`)
-            ) {
-              const userObj = blockedUsers.find(
-                (u) => String(u.member_num) === String(currentMemberId),
-              );
-              if (userObj && userObj.memo && userObj.memo.trim() !== "") {
+            if (isBadgeMode) {
+              if (
+                currentMemberId &&
+                nicknameElement &&
+                !article.querySelector(`.ext-badge-id-${currentMemberId}`)
+              ) {
+                const userObj = blockedUserMap.get(currentMemberId);
+                const badgeLabel =
+                  userObj && userObj.memo && userObj.memo.trim() !== ""
+                    ? userObj.memo.trim()
+                    : "차단됨";
                 const blockBadge = createMemoBadgeElement(
                   currentMemberId,
-                  userObj.memo.trim(),
+                  badgeLabel,
                   "red-solid",
                 );
                 if (blockBadge) nicknameElement.after(blockBadge);
               }
-            }
-
-            if (isBadgeMode) {
-              article.style.backgroundColor = "#fff1f2";
+              // article.style.backgroundColor = "#fff1f2";
               article.classList.add("ext-blocked-user-layout");
-              return; // 가드를 패스하므로 다중 노출 카드 전부 동시 바인딩 성공
+              return;
             }
 
             if (article.dataset.extFiltered) return;
@@ -345,7 +361,7 @@ function executeFilterWithMinTime() {
             } else {
               article.remove();
             }
-          } else if (currentMemberId && memos[currentMemberId]) {
+          } else if (currentMemberId && memoMap.has(currentMemberId)) {
             if (
               nicknameElement &&
               !article.querySelector(`.ext-badge-id-${currentMemberId}`)
@@ -354,7 +370,7 @@ function executeFilterWithMinTime() {
               const badge = createMemoBadgeElement(
                 currentMemberId,
                 memoData.text,
-                memoData.style,
+                memoData.color,
               );
               if (badge) nicknameElement.after(badge);
             }
@@ -390,24 +406,23 @@ function executeFilterWithMinTime() {
             }
 
             if (currentMemberId && blockedMemberIds.includes(currentMemberId)) {
-              if (
-                nicknameElement &&
-                !parentLi.querySelector(`.ext-badge-id-${currentMemberId}`)
-              ) {
-                const userObj = blockedUsers.find(
-                  (u) => String(u.member_num) === String(currentMemberId),
-                );
-                if (userObj && userObj.memo && userObj.memo.trim() !== "") {
+              if (isBadgeMode) {
+                if (
+                  nicknameElement &&
+                  !parentLi.querySelector(`.ext-badge-id-${currentMemberId}`)
+                ) {
+                  const userObj = blockedUserMap.get(currentMemberId);
+                  const badgeLabel =
+                    userObj && userObj.memo && userObj.memo.trim() !== ""
+                      ? userObj.memo.trim()
+                      : "차단됨";
                   const blockBadge = createMemoBadgeElement(
                     currentMemberId,
-                    userObj.memo.trim(),
+                    badgeLabel,
                     "red-solid",
                   );
                   if (blockBadge) nicknameElement.after(blockBadge);
                 }
-              }
-
-              if (isBadgeMode) {
                 parentLi.style.backgroundColor = "#fff1f2";
                 parentLi.classList.add("ext-blocked-user-layout");
                 return;
@@ -423,7 +438,7 @@ function executeFilterWithMinTime() {
               } else {
                 parentLi.remove();
               }
-            } else if (currentMemberId && memos[currentMemberId]) {
+            } else if (currentMemberId && memoMap.has(currentMemberId)) {
               if (
                 nicknameElement &&
                 !parentLi.querySelector(`.ext-badge-id-${currentMemberId}`)
@@ -432,7 +447,7 @@ function executeFilterWithMinTime() {
                 const badge = createMemoBadgeElement(
                   currentMemberId,
                   memoData.text,
-                  memoData.style,
+                  memoData.color,
                 );
                 if (badge) nicknameElement.after(badge);
               }
@@ -499,41 +514,41 @@ function executeFilterWithMinTime() {
           }
 
           if (shouldBlind) {
-            if (
-              currentMemberId &&
-              authorElement &&
-              !row.querySelector(`.ext-badge-id-${currentMemberId}`)
-            ) {
-              const userObj = blockedUsers.find(
-                (u) => String(u.member_num) === String(currentMemberId),
-              );
-              if (userObj && userObj.memo && userObj.memo.trim() !== "") {
+            if (isBadgeMode) {
+              if (
+                currentMemberId &&
+                authorElement &&
+                !row.querySelector(`.ext-badge-id-${currentMemberId}`)
+              ) {
+                const userObj = blockedUserMap.get(currentMemberId);
+                const badgeLabel =
+                  userObj && userObj.memo && userObj.memo.trim() !== ""
+                    ? userObj.memo.trim()
+                    : "차단됨";
                 const blockBadge = createMemoBadgeElement(
                   currentMemberId,
-                  userObj.memo.trim(),
+                  badgeLabel,
                   "red-solid",
                 );
                 if (blockBadge) authorElement.after(blockBadge);
               }
-            }
-
-            if (isBadgeMode) {
               row.style.backgroundColor = "#fff1f2";
               row.classList.add("ext-blocked-user-layout");
-              return; // 🎯 가드 전 즉시 리턴하므로 동일 유저의 모든 tr 행 염색 대성공
+              return;
             }
 
             if (row.dataset.extFiltered) return;
             row.dataset.extFiltered = "true";
 
             if (isBlindMode) {
+              const colCount = row.querySelectorAll("td, th").length || 6;
               const cacheHTML = row.innerHTML;
-              row.innerHTML = `<td colspan="6" style="padding: 0;">${buildBlindWrapperHTML("게시글", `<table><tr>${cacheHTML}</tr></table>`)}</td>`;
+              row.innerHTML = `<td colspan="${colCount}" style="padding: 0;">${buildBlindWrapperHTML("게시글", `<table style="width:100%"><tbody><tr>${cacheHTML}</tr></tbody></table>`)}</td>`;
               attachBlindToggleEvents(row);
             } else {
               row.remove();
             }
-          } else if (currentMemberId && memos[currentMemberId]) {
+          } else if (currentMemberId && memoMap.has(currentMemberId)) {
             if (
               authorElement &&
               !row.querySelector(`.ext-badge-id-${currentMemberId}`)
@@ -542,7 +557,7 @@ function executeFilterWithMinTime() {
               const badge = createMemoBadgeElement(
                 currentMemberId,
                 memoData.text,
-                memoData.style,
+                memoData.color,
               );
               if (badge) authorElement.after(badge);
             }
@@ -608,25 +623,31 @@ function executeFilterWithMinTime() {
             blockedMemberIds.length > 0 &&
             blockedMemberIds.includes(currentMemberId)
           ) {
-            if (
-              nicknameElement &&
-              !comment.querySelector(`.ext-badge-id-${currentMemberId}`)
-            ) {
-              const userObj = blockedUsers.find(
-                (u) => String(u.member_num) === String(currentMemberId),
-              );
-              if (userObj && userObj.memo && userObj.memo.trim() !== "") {
+            const totalCommentTarget =
+              comment.closest("li, div.comment-item") || comment;
+
+            if (isBadgeMode) {
+              if (
+                nicknameElement &&
+                !comment.querySelector(`.ext-badge-id-${currentMemberId}`)
+              ) {
+                const userObj = blockedUserMap.get(currentMemberId);
+                const badgeLabel =
+                  userObj && userObj.memo && userObj.memo.trim() !== ""
+                    ? userObj.memo.trim()
+                    : "차단됨";
                 const blockBadge = createMemoBadgeElement(
                   currentMemberId,
-                  userObj.memo.trim(),
+                  badgeLabel,
                   "red-solid",
                 );
                 if (blockBadge) nicknameElement.after(blockBadge);
               }
+              totalCommentTarget.style.backgroundColor = "#fff1f2";
+              totalCommentTarget.classList.add("ext-blocked-user-layout");
+              return;
             }
 
-            const totalCommentTarget =
-              comment.closest("li, div.comment-item") || comment;
             if (totalCommentTarget.dataset.extFiltered) return;
             totalCommentTarget.dataset.extFiltered = "true";
 
@@ -637,16 +658,17 @@ function executeFilterWithMinTime() {
                 cacheHTML,
               );
               attachBlindToggleEvents(totalCommentTarget);
-            } else if (isBadgeMode) {
-              totalCommentTarget.style.backgroundColor = "#fff1f2";
-              totalCommentTarget.classList.add("ext-blocked-user-layout");
             } else {
               totalCommentTarget.remove();
             }
             return;
           }
 
-          if (nicknameElement && currentMemberId && memos[currentMemberId]) {
+          if (
+            nicknameElement &&
+            currentMemberId &&
+            memoMap.has(currentMemberId)
+          ) {
             if (
               nicknameElement &&
               !comment.querySelector(`.ext-badge-id-${currentMemberId}`)
@@ -655,7 +677,7 @@ function executeFilterWithMinTime() {
               const badge = createMemoBadgeElement(
                 currentMemberId,
                 memoData.text,
-                memoData.style,
+                memoData.color,
               );
               if (badge) nicknameElement.after(badge);
             }
@@ -692,7 +714,7 @@ function executeFilterWithMinTime() {
               authorElement.className.match(/member_(\d+)/)?.[1];
             if (authorMemberId) {
               if (
-                memos[authorMemberId] &&
+                memoMap.has(authorMemberId) &&
                 !authorElement.nextElementSibling?.classList.contains(
                   "ext-user-memo-badge",
                 )
@@ -701,7 +723,7 @@ function executeFilterWithMinTime() {
                 const badge = createMemoBadgeElement(
                   authorMemberId,
                   memoData.text,
-                  memoData.style,
+                  memoData.color,
                 );
                 if (badge) authorElement.after(badge);
               }
@@ -752,6 +774,13 @@ function executeFilterWithMinTime() {
             }
           }
         }
+
+        // ⑧ 첨부파일 전체 다운로드 버튼
+        document
+          .querySelectorAll(".ed.dropdown .ed.dropdown-menu")
+          .forEach((menu) => {
+            injectDownloadAllButton(menu);
+          });
 
         // ⑦ 개드립콘 처리 구역 등 하단 레거시 로직 보존 집행
         const dogconImgs = document.querySelectorAll(
@@ -872,6 +901,9 @@ function executeFilterWithMinTime() {
           });
         }
 
+        // 링크 복사 버튼
+        injectCopyLinkButton();
+
         resolve();
       },
     );
@@ -879,6 +911,109 @@ function executeFilterWithMinTime() {
   Promise.all([minTimePromise, filterPromise]).then(() => {
     removeLoadingOverlay();
   });
+}
+
+// 6. 게시물 원본 링크 복사 버튼 주입
+function injectCopyLinkButton() {
+  document
+    .querySelectorAll(
+      ".ed.article-head.margin-bottom-large .ed.margin-xxsmall.text-default",
+    )
+    .forEach((container) => {
+      if (container.querySelector(".ext-copy-link-btn")) return;
+      if (!container.querySelector("i.fas.fa-link")) return;
+
+      const linkEl = container.querySelector("a[href]");
+      if (!linkEl) return;
+      const url = linkEl.href;
+
+      const btn = document.createElement("a");
+      btn.className = "ext-copy-link-btn";
+      btn.href = "#";
+      btn.textContent = "링크 복사";
+      btn.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        navigator.clipboard
+          .writeText(url)
+          .then(() => {
+            btn.textContent = "복사됨 ✓";
+            setTimeout(() => {
+              btn.textContent = "링크 복사";
+            }, 1500);
+          })
+          .catch(() => {
+            // clipboard API 실패 시 fallback
+            const ta = document.createElement("textarea");
+            ta.value = url;
+            ta.style.position = "fixed";
+            ta.style.opacity = "0";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            btn.textContent = "복사됨 ✓";
+            setTimeout(() => {
+              btn.textContent = "링크 복사";
+            }, 1500);
+          });
+      });
+
+      container.appendChild(btn);
+    });
+}
+
+// 5. 첨부파일 전체 다운로드 버튼 주입
+function injectDownloadAllButton(menu) {
+  if (!menu || menu.querySelector(".ext-dl-all-btn")) return;
+
+  const links = Array.from(
+    menu.querySelectorAll("li a[href*='procFileDownload']"),
+  );
+  if (links.length < 2) return;
+
+  const INTERVAL_MS = 300;
+
+  const btnLi = document.createElement("li");
+  btnLi.style.cssText =
+    "border-bottom: 1px solid #e2e8f0; margin-bottom: 4px; padding-bottom: 4px;";
+
+  const btn = document.createElement("a");
+  btn.className = "ext-dl-all-btn";
+  btn.href = "#";
+  btn.innerHTML = `<i class="fas fa-download"></i> <span>전체 다운로드 (${links.length}개)</span>`;
+
+  btn.addEventListener("click", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    const span = btn.querySelector("span");
+    span.textContent = `다운로드 중... (${links.length}개)`;
+    btn.style.color = "#64748b";
+
+    links.forEach((link, i) => {
+      setTimeout(() => {
+        const a = document.createElement("a");
+        a.href = link.href;
+        a.download = "";
+        a.style.display = "none";
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+      }, i * INTERVAL_MS);
+    });
+
+    setTimeout(
+      () => {
+        span.textContent = `전체 다운로드 (${links.length}개)`;
+        btn.style.color = "#0284c7";
+      },
+      links.length * INTERVAL_MS + 500,
+    );
+  });
+
+  btnLi.appendChild(btn);
+  menu.insertBefore(btnLi, menu.firstChild);
 }
 
 // 4. 개드립콘 컨텍스트 메뉴 제어
@@ -1024,7 +1159,7 @@ function bindBlockModalEvents() {
       const blockReason = reasonInput ? reasonInput.value.trim() : "";
 
       const newBlockUserObj = {
-        date: "2026/05/19",
+        date: getTodayDateStr(),
         member_num: String(targetMemberIdToBlock).trim(),
         memo: blockReason,
       };
@@ -1050,19 +1185,11 @@ function bindBlockModalEvents() {
   }
 }
 
-function openUserMemoModal(nickname, memberId, rawMemoData) {
+function openUserMemoModal(nickname, memberId, memoEntry) {
   targetMemoMemberId = memberId;
-  let currentMemoText = "";
-  selectedMemoColorStyle = "blue";
-  if (rawMemoData) {
-    if (rawMemoData.includes(":")) {
-      const parts = rawMemoData.split(":");
-      currentMemoText = parts[0];
-      selectedMemoColorStyle = parts[1] || "blue";
-    } else {
-      currentMemoText = rawMemoData;
-    }
-  }
+  const currentMemoText = memoEntry?.memo || "";
+  selectedMemoColorStyle = memoEntry?.color || "blue";
+
   const titleEl = document.getElementById("ext-memo-modal-title");
   const inputEl = document.getElementById("ext-user-memo-modal-input");
   const deleteBtn = document.getElementById("memo-modal-delete-btn");
@@ -1134,6 +1261,7 @@ function bindMemoModalEvents() {
   const cancelBtn = document.getElementById("memo-modal-cancel-btn");
   const deleteBtn = document.getElementById("memo-modal-delete-btn");
   const inputEl = document.getElementById("ext-user-memo-modal-input");
+  if (!confirmBtn || !cancelBtn || !deleteBtn || !inputEl) return;
   cancelBtn.addEventListener("click", closeUserMemoModal);
   inputEl.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
@@ -1155,9 +1283,11 @@ function bindMemoModalEvents() {
       return;
     }
     chrome.storage.local.get(["userMemos"], (res) => {
-      const currentMemos = res.userMemos || {};
-      delete currentMemos[targetMemoMemberId];
-      chrome.storage.local.set({ userMemos: currentMemos }, () => {
+      const arr = Array.isArray(res.userMemos) ? res.userMemos : [];
+      const updated = arr.filter(
+        (m) => String(m.member_num) !== String(targetMemoMemberId),
+      );
+      chrome.storage.local.set({ userMemos: updated }, () => {
         closeUserMemoModal();
         window.location.reload();
       });
@@ -1178,14 +1308,19 @@ function bindMemoModalEvents() {
     }
     const memoText = inputEl.value.trim();
     chrome.storage.local.get(["userMemos"], (res) => {
-      const currentMemos = res.userMemos || {};
-      if (memoText === "") {
-        delete currentMemos[targetMemoMemberId];
-      } else {
-        currentMemos[targetMemoMemberId] =
-          `${memoText}:${selectedMemoColorStyle}`;
+      const arr = Array.isArray(res.userMemos) ? res.userMemos : [];
+      const filtered = arr.filter(
+        (m) => String(m.member_num) !== String(targetMemoMemberId),
+      );
+      if (memoText !== "") {
+        filtered.push({
+          member_num: String(targetMemoMemberId),
+          memo: memoText,
+          date: getTodayDateStr(),
+          color: selectedMemoColorStyle,
+        });
       }
-      chrome.storage.local.set({ userMemos: currentMemos }, () => {
+      chrome.storage.local.set({ userMemos: filtered }, () => {
         closeUserMemoModal();
         window.location.reload();
       });
@@ -1201,28 +1336,26 @@ function handlePopupMenuDetected(popupElement) {
       if (chrome.runtime?.lastError || !chrome.runtime || !chrome.runtime.id)
         return;
       const list = result.blocked_users || [];
-      const memos = result.userMemos || {};
+      const memosArr = Array.isArray(result.userMemos) ? result.userMemos : [];
       const isAlreadyBlocked = list.some(
         (item) =>
           String(item.member_num) === String(lastClickedUserData.memberId),
       );
-      const currentMemoData = memos[lastClickedUserData.memberId] || "";
+      const memoEntry =
+        memosArr.find(
+          (m) => String(m.member_num) === String(lastClickedUserData.memberId),
+        ) || null;
       insertMemberMenu(
         lastClickedUserData.memberId,
         lastClickedUserData.nickname,
         isAlreadyBlocked,
-        currentMemoData,
+        memoEntry,
       );
     });
   }
 }
 
-function insertMemberMenu(
-  memberId,
-  nickname,
-  isAlreadyBlocked,
-  currentMemoData,
-) {
+function insertMemberMenu(memberId, nickname, isAlreadyBlocked, memoEntry) {
   const popupMenuParentEl = document.getElementById("popup_menu_area");
   if (!popupMenuParentEl) return;
   const popupMenuEl = popupMenuParentEl.querySelector("ul");
@@ -1232,9 +1365,7 @@ function insertMemberMenu(
       ".ext-inserted-member-block, .ext-inserted-member-memo-link",
     )
     .forEach((el) => el.remove());
-  let pureMemoText = currentMemoData.includes(":")
-    ? currentMemoData.split(":")[0]
-    : currentMemoData;
+  const pureMemoText = memoEntry?.memo || "";
   const memoLi = document.createElement("li");
   memoLi.className = "ext-inserted-member-memo-link";
   const memoSuffix =
@@ -1246,7 +1377,7 @@ function insertMemberMenu(
     e.preventDefault();
     e.stopPropagation();
     popupMenuParentEl.style.display = "none";
-    openUserMemoModal(nickname, memberId, currentMemoData);
+    openUserMemoModal(nickname, memberId, memoEntry);
   });
   const blockItem = document.createElement("li");
   blockItem.className = "ext-inserted-member-block";
@@ -1307,6 +1438,13 @@ const popupObserver = new MutationObserver((mutationsList) => {
               }
             }, 50);
           }
+          // 첨부파일 드롭다운 동적 감지
+          const attachMenu = node.matches?.("ul.ed.dropdown-menu")
+            ? node
+            : node.querySelector?.("ul.ed.dropdown-menu");
+          if (attachMenu && !attachMenu.querySelector(".ext-dl-all-btn")) {
+            injectDownloadAllButton(attachMenu);
+          }
           if (node.id === targetPopupMenuId) {
             handlePopupMenuDetected(node);
           } else {
@@ -1340,13 +1478,58 @@ function startPopupObservation() {
     attributeFilter: ["style"],
   });
 }
+
+// 폰트 주입 팩토리: 확장프로그램 내부 CSS를 개드립 헤더에 꽂아 넣습니다.
+function injectPretendardFont() {
+  // 1. 첫 번째 폰트 ID를 기준으로 중복 삽입 완벽 방어
+  if (document.getElementById("ext-pretendard-static-font")) return;
+
+  const fontList = [
+    {
+      fontName: "pretendard-static",
+      url: "assets/fonts/Pretendard/web/static/pretendard.css",
+    },
+    {
+      fontName: "pretendard-variable",
+      url: "assets/fonts/Pretendard/web/variable/pretendardvariable.css",
+    },
+    {
+      fontName: "pretendardJP-static",
+      url: "assets/fonts/PretendardJP/web/static/pretendard-jp.css",
+    },
+    {
+      fontName: "pretendardJP-variable",
+      url: "assets/fonts/PretendardJP/web/variable/pretendardvariable-jp.css",
+    },
+  ];
+
+  // 2. head가 아직 생성 전이더라도 html(documentElement) 최상단에 강제 주입
+  const targetNode = document.head || document.documentElement;
+
+  fontList.forEach((item) => {
+    const fontLink = document.createElement("link");
+    fontLink.id = `ext-${item.fontName}-font`;
+    fontLink.rel = "stylesheet";
+
+    // chrome.runtime.getURL을 써서 현재 확장프로그램의 '절대 경로' 매핑
+    fontLink.href = chrome.runtime.getURL(item.url);
+
+    targetNode.appendChild(fontLink);
+  });
+}
+
+// 스크립트 실행 즉시 폰트부터 최우선 장전 (깜빡임 원천 차단)
+injectPretendardFont();
+
 if (
   document.readyState === "interactive" ||
   document.readyState === "complete"
 ) {
   executeFilterWithMinTime();
 } else {
-  document.addEventListener("DOMContentLoaded", executeFilterWithMinTime);
+  document.addEventListener("DOMContentLoaded", () => {
+    executeFilterWithMinTime();
+  });
 }
 window.addEventListener("load", () => {
   if (typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.id) {
@@ -1385,3 +1568,243 @@ document.addEventListener("keydown", (e) => {
     }
   }
 });
+
+/* ================= 🚀 퀵버튼 패널 ================= */
+
+const COOKIE_URL_QK = "https://www.dogdrip.net";
+const THEME_COOKIE_QK = "theme";
+const TXT_COOKIE_QK = "txtmode";
+const COLOR_CHEME_COOKIE_QK = "rx_color_scheme";
+
+function initQuickPanel() {
+  // 구형 도구모음 사용 설정이면 퀵패널 생성하지 않음
+  chrome.storage.local.get(["legacyToolbar"], (res) => {
+    if (res.legacyToolbar) return;
+    _buildQuickPanel();
+  });
+}
+
+function _buildQuickPanel() {
+  // 게시물 여부: 개드립 사이트의 스크롤 퀵버튼 박스가 있으면 게시물
+  const isPost = !!document.querySelector("div.eq.button-scroll-tool-box");
+
+  const panel = document.createElement("div");
+  panel.id = "ext-quick-panel";
+
+  // 공통 버튼 정의
+  const commonBtns = [
+    {
+      id: "extqk-top",
+      icon: "fas fa-arrow-up",
+      tooltip: "맨 위로",
+      onClick: () => window.scrollTo({ top: 0, behavior: "smooth" }),
+    },
+    {
+      id: "extqk-bottom",
+      icon: "fas fa-arrow-down",
+      tooltip: "맨 아래로",
+      onClick: () =>
+        window.scrollTo({
+          top: document.body.scrollHeight,
+          behavior: "smooth",
+        }),
+    },
+    {
+      id: "extqk-readability",
+      icon: "fas fa-book-open",
+      tooltip: "가독성 모드",
+      onClick: () => toggleReadabilityMode(),
+    },
+    {
+      id: "extqk-dogcon",
+      icon: "far fa-smile-wink",
+      tooltip: "개드립콘 절약",
+      onClick: () => toggleTxtModeQk(),
+    },
+    {
+      id: "extqk-dark",
+      icon: "fas fa-sun",
+      tooltip: "다크모드",
+      onClick: () => toggleThemeQk(),
+    },
+  ];
+
+  // 게시물 전용 버튼
+  const postBtns = [
+    {
+      id: "extqk-comment",
+      icon: "fas fa-comments",
+      tooltip: "댓글 목록",
+      onClick: () => {
+        const target = document.getElementById("comment_top");
+        if (target) target.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+    {
+      id: "extqk-content",
+      icon: "fas fa-align-left",
+      tooltip: "본문",
+      onClick: () => {
+        const target = document.querySelector(".xe_content, .document_79");
+        if (target) target.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+    {
+      id: "extqk-list",
+      icon: "fas fa-list-alt",
+      tooltip: "목록으로",
+      onClick: () => {
+        const target = document.getElementById("comment_end");
+        if (target) target.scrollIntoView({ behavior: "smooth" });
+      },
+    },
+  ];
+
+  const buttons = isPost ? [...commonBtns, ...postBtns] : commonBtns;
+
+  buttons.forEach(({ id, icon, tooltip, onClick }) => {
+    const btn = document.createElement("button");
+    btn.id = id;
+    btn.className = "ext-qk-btn";
+    btn.setAttribute("data-tooltip", tooltip);
+    btn.innerHTML = `<span class="ext-qk-label">${tooltip}</span><i class="${icon}"></i>`;
+    btn.addEventListener("click", onClick);
+    panel.appendChild(btn);
+  });
+
+  document.body.appendChild(panel);
+
+  // 초기 상태 반영
+  syncQuickPanelState();
+}
+
+function syncQuickPanelState() {
+  if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id)
+    return;
+
+  // 가독성 모드
+  chrome.storage.local.get(["readabilityMode"], (res) => {
+    const isOn = !!res.readabilityMode;
+    const btn = document.getElementById("extqk-readability");
+    const label = isOn ? "📖 가독성 모드 ON" : "가독성 모드";
+    if (isOn) {
+      document.documentElement.classList.add("ext-readability-mode");
+    } else {
+      document.documentElement.classList.remove("ext-readability-mode");
+    }
+    if (!btn) return;
+    btn.classList.toggle("ext-qk-active", isOn);
+    btn.setAttribute("data-tooltip", label);
+    const labelEl = btn.querySelector(".ext-qk-label");
+    if (labelEl) labelEl.textContent = label;
+  });
+
+  chrome.runtime.sendMessage(
+    { type: "GET_COOKIE", name: THEME_COOKIE_QK },
+    (res) => {
+      const btn = document.getElementById("extqk-dark");
+      if (!btn) return;
+      const isDark = res && res.value === "b";
+      const label = isDark ? "🌙 다크모드 ON" : "다크모드";
+      btn.classList.toggle("ext-qk-active", isDark);
+      btn.setAttribute("data-tooltip", label);
+      const labelEl = btn.querySelector(".ext-qk-label");
+      if (labelEl) labelEl.textContent = label;
+      const iconEl = btn.querySelector("i");
+      if (iconEl) iconEl.className = isDark ? "fas fa-moon" : "fas fa-sun";
+    },
+  );
+
+  chrome.runtime.sendMessage(
+    { type: "GET_COOKIE", name: TXT_COOKIE_QK },
+    (res) => {
+      const btn = document.getElementById("extqk-dogcon");
+      if (!btn) return;
+      const isTxt = res && res.value === "1";
+      const label = isTxt ? "😶 개드립콘 절약 ON" : "개드립콘 절약";
+      btn.classList.toggle("ext-qk-active", isTxt);
+      btn.setAttribute("data-tooltip", label);
+      const labelEl = btn.querySelector(".ext-qk-label");
+      if (labelEl) labelEl.textContent = label;
+      const iconEl = btn.querySelector("i");
+      if (iconEl)
+        iconEl.className = isTxt ? "fas fa-meh-blank" : "far fa-smile-wink";
+    },
+  );
+}
+
+function toggleReadabilityMode() {
+  chrome.storage.local.get(["readabilityMode"], (res) => {
+    const newVal = !res.readabilityMode;
+    chrome.storage.local.set({ readabilityMode: newVal }, () => {
+      syncQuickPanelState();
+    });
+  });
+}
+
+function toggleThemeQk() {
+  if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id)
+    return;
+  chrome.runtime.sendMessage(
+    { type: "GET_COOKIE", name: THEME_COOKIE_QK },
+    (res) => {
+      const newVal = res && res.value === "b" ? "a" : "b";
+      const isDark = newVal === "b";
+
+      // body 클래스 즉시 전환 (새로고침 전 깜빡임 방지)
+      document.body.classList.toggle("color_scheme_dark", isDark);
+      document.body.classList.toggle("color_scheme_light", !isDark);
+
+      chrome.runtime.sendMessage(
+        { type: "SET_COOKIE", name: THEME_COOKIE_QK, value: newVal },
+        () => {
+          syncQuickPanelState();
+          window.location.reload();
+        },
+      );
+    },
+  );
+  chrome.runtime.sendMessage(
+    { type: "GET_COOKIE", name: COLOR_CHEME_COOKIE_QK },
+    (res) => {
+      const newVal = res && res.value === "light" ? "dark" : "light";
+      const isDark = newVal === "dark";
+
+      chrome.runtime.sendMessage(
+        { type: "SET_COOKIE", name: COLOR_CHEME_COOKIE_QK, value: newVal },
+        () => {
+          syncQuickPanelState();
+          window.location.reload();
+        },
+      );
+    },
+  );
+}
+
+function toggleTxtModeQk() {
+  if (typeof chrome === "undefined" || !chrome.runtime || !chrome.runtime.id)
+    return;
+  chrome.runtime.sendMessage(
+    { type: "GET_COOKIE", name: TXT_COOKIE_QK },
+    (res) => {
+      const newVal = res && res.value === "1" ? "0" : "1";
+      chrome.runtime.sendMessage(
+        { type: "SET_COOKIE", name: TXT_COOKIE_QK, value: newVal },
+        () => {
+          syncQuickPanelState();
+          window.location.reload();
+        },
+      );
+    },
+  );
+}
+
+// DOMContentLoaded 이후 패널 삽입
+if (
+  document.readyState === "interactive" ||
+  document.readyState === "complete"
+) {
+  initQuickPanel();
+} else {
+  document.addEventListener("DOMContentLoaded", initQuickPanel);
+}

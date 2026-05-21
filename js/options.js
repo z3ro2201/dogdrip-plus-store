@@ -3,14 +3,14 @@
  */
 
 document.addEventListener("DOMContentLoaded", () => {
-  // 1. 크롬 스토리지에서 전체 차단 리스트 및 유저 메모 로드
+  // 2. 크롬 스토리지에서 전체 차단 리스트 및 유저 메모 로드
   loadData("keywords", "keyword-list");
   loadData("blocked_users", "nickname-list");
   loadData("blockedDogcons", "dogcon-list");
   loadData("blockedDogconGroups", "dogcon-group-list");
   if (typeof loadDashboardUserMemos === "function") loadDashboardUserMemos();
 
-  // 2. 📐 레이아웃 제어 체크박스 및 차단 방식 라디오 상태 일괄 복원
+  // 3. 📐 레이아웃 제어 체크박스 및 차단 방식 라디오 상태 일괄 복원
   chrome.storage.local.get(
     [
       "hideNotice",
@@ -21,6 +21,8 @@ document.addEventListener("DOMContentLoaded", () => {
       "preventYoutubeAlgorithm",
       "contentWidth",
       "blockMethod",
+      "readabilityMode",
+      "legacyToolbar",
     ],
     (result) => {
       const isCompact = result.compactMode || false;
@@ -33,6 +35,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const preventYoutubeCb = document.getElementById(
         "preventYoutubeAlgorithm",
       );
+      const readabilityCb = document.getElementById("readability-mode-cb");
+      const legacyToolbarCb = document.getElementById("legacy-toolbar-cb");
       const contentWidthInput = document.getElementById("content-width-input");
 
       if (hideNoticeCb) hideNoticeCb.checked = result.hideNotice || false;
@@ -42,6 +46,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (disableVoteCb) disableVoteCb.checked = result.disableVote || false;
       if (preventYoutubeCb)
         preventYoutubeCb.checked = result.preventYoutubeAlgorithm || false;
+      if (readabilityCb)
+        readabilityCb.checked = result.readabilityMode || false;
+      if (legacyToolbarCb)
+        legacyToolbarCb.checked = result.legacyToolbar || false;
       if (contentWidthInput)
         contentWidthInput.value = result.contentWidth || "";
 
@@ -52,9 +60,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (method === "blind" && methodBlind) {
         methodBlind.checked = true;
+      } else if (method === "badge" && methodBadge) {
+        methodBadge.checked = true;
       } else if (methodRemove) {
-        methodRemove.checked = true;
-      } else if (memoBadge) {
         methodRemove.checked = true;
       }
 
@@ -62,7 +70,7 @@ document.addEventListener("DOMContentLoaded", () => {
     },
   );
 
-  // 3. 레이아웃 체크박스 및 라디오 버튼 실시간 동기화 바인딩
+  // 4. 레이아웃 체크박스 및 라디오 버튼 실시간 동기화 바인딩
   const hideNoticeCb = document.getElementById("hide-notice-cb");
   const hidePopularCb = document.getElementById("hide-popular-cb");
   const hideSidebarCb = document.getElementById("hide-sidebar-cb");
@@ -71,6 +79,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const compactModeCb = document.getElementById("compact-mode-cb");
   const disableVoteCb = document.getElementById("disable-vote-cb");
   const preventYoutubeCb = document.getElementById("preventYoutubeAlgorithm");
+  const readabilityCb = document.getElementById("readability-mode-cb");
+  const legacyToolbarCb = document.getElementById("legacy-toolbar-cb");
   const applyWidthBtn = document.getElementById("apply-width-btn");
   const contentWidthInput = document.getElementById("content-width-input");
 
@@ -108,6 +118,14 @@ document.addEventListener("DOMContentLoaded", () => {
     preventYoutubeCb.addEventListener("change", (e) =>
       handleCheckboxChange("preventYoutubeAlgorithm", e.target.checked),
     );
+  if (readabilityCb)
+    readabilityCb.addEventListener("change", (e) =>
+      handleCheckboxChange("readabilityMode", e.target.checked),
+    );
+  if (legacyToolbarCb)
+    legacyToolbarCb.addEventListener("change", (e) =>
+      handleCheckboxChange("legacyToolbar", e.target.checked),
+    );
 
   if (applyWidthBtn) applyWidthBtn.addEventListener("click", applyCustomWidth);
   if (contentWidthInput) {
@@ -117,7 +135,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   // =========================================================================
-  // ⚡ 4. 좌측 사이드바 탭 메뉴 클릭 시 데이터 실시간 재로드 및 카드 스위칭 인터랙션
+  // ⚡ 5. 좌측 사이드바 탭 메뉴 클릭 시 데이터 실시간 재로드 및 카드 스위칭 인터랙션
   // =========================================================================
   const navItems = document.querySelectorAll(".nav-item");
   const mainTitleEl = document.getElementById("main-title");
@@ -173,7 +191,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   });
 
-  // 5. 🛠️ 미니 팝업창 취소 단추 리스너
+  // 6. 🛠️ 미니 팝업창 취소 단추 리스너
   const cancelBtn = document.getElementById("ext-dash-popup-cancel-btn");
   if (cancelBtn) {
     cancelBtn.addEventListener("click", () => {
@@ -182,7 +200,7 @@ document.addEventListener("DOMContentLoaded", () => {
     });
   }
 
-  // 6. 🚀 [반응 없음 버그 완전 진압] 가져오기/내보내기 클릭 회로를 DOM 안정지대 안으로 완벽 이식
+  // 7. 🚀 [반응 없음 버그 완전 진압] 가져오기/내보내기 클릭 회로를 DOM 안정지대 안으로 완벽 이식
   // ① 순정 데이터 내보내기 (백업)
   const backupBtn = document.getElementById("backup-btn");
   if (backupBtn) {
@@ -198,13 +216,9 @@ document.addEventListener("DOMContentLoaded", () => {
   if (restoreBtn && fileInput) {
     restoreBtn.addEventListener("click", (e) => {
       e.preventDefault();
-      fileInput.click(); // 숨겨진 input file 강제 클릭 트리거
-      console.log("ali");
+      fileInput.click();
     });
     fileInput.addEventListener("change", restoreSettings);
-  } else {
-    console.log(restoreBtn);
-    console.log(fileInput);
   }
 
   // ③ 타사 Dogdrip++ 데이터 호환 가져오기
@@ -271,6 +285,11 @@ document.addEventListener("DOMContentLoaded", () => {
 }); // 💡 DOMContentLoaded 종료 괄호선 위치 확인용
 
 /* ================= 🍪 기능 코어 연산 엔진 구역 ================= */
+function getTodayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
+
 function handleBlockMethodRadioChange(e) {
   if (e.target.checked) {
     chrome.storage.local.set({ blockMethod: e.target.value }, () => {
@@ -308,7 +327,8 @@ function loadData(key, containerId) {
       if (query) {
         list = list.filter((item) => {
           const memo = (item.memo || "").toLowerCase();
-          return memo.includes(query);
+          const memberId = String(item.member_num || "");
+          return memo.includes(query) || memberId.includes(query);
         });
       }
     }
@@ -323,7 +343,9 @@ function removeListItem(key, value, containerId) {
     if (key === "blockedDogcons" || key === "blockedDogconGroups") {
       list = list.filter((item) => item.id !== value.id);
     } else if (key === "blocked_users") {
-      list = list.filter((item) => item.member_num !== value.member_num);
+      list = list.filter(
+        (item) => String(item.member_num) !== String(value.member_num),
+      );
     } else if (key === "keywords") {
       list = list.filter((item) => item.word !== value.word);
     } else {
@@ -405,37 +427,32 @@ function loadDashboardUserMemos() {
   if (!container) return;
   container.innerHTML = "";
   chrome.storage.local.get(["userMemos"], (result) => {
-    const memos = result.userMemos || {};
-    const memberIds = Object.keys(memos);
-    if (memberIds.length === 0) {
+    const memos = Array.isArray(result.userMemos) ? result.userMemos : [];
+    if (memos.length === 0) {
       container.innerHTML =
         '<span style="color: #94a3b8; font-size: 13px;">등록된 유저 메모 내역이 현재 비어있습니다.</span>';
       return;
     }
-    memberIds.forEach((mid) => {
-      const rawData = memos[mid];
-      let memoText = rawData;
-      let colorStyle = "blue";
-      if (rawData.includes(":")) {
-        const parts = rawData.split(":");
-        memoText = parts[0];
-        colorStyle = parts[1] || "blue";
-      }
+    memos.forEach((entry) => {
+      const mid = String(entry.member_num);
+      const memoText = entry.memo || "";
+      const colorStyle = entry.color || "blue";
+      const dateStr = entry.date ? ` · ${entry.date}` : "";
       const memoBadge = document.createElement("span");
       memoBadge.className = `ext-user-memo-badge ext-memo-${colorStyle}`;
       memoBadge.style.cssText =
         "padding: 6px 12px; font-size: 12px; border-radius: 6px; cursor: pointer; margin: 4px;";
-      memoBadge.innerText = `${memoText} (ID: ${mid})`;
+      memoBadge.innerText = `${memoText} (ID: ${mid}${dateStr})`;
       memoBadge.title = "클릭하여 메모 내용 수정 및 삭제";
       memoBadge.addEventListener("click", () => {
-        openDashboardMemoPopup(mid, memoText);
+        openDashboardMemoPopup(mid, entry);
       });
       container.appendChild(memoBadge);
     });
   });
 }
 
-function openDashboardMemoPopup(memberId, currentText) {
+function openDashboardMemoPopup(memberId, memoEntry) {
   const popup = document.getElementById("ext-dashboard-memo-edit-popup");
   const input = document.getElementById("ext-dash-popup-input");
   const saveBtn = document.getElementById("ext-dash-popup-save-btn");
@@ -443,6 +460,9 @@ function openDashboardMemoPopup(memberId, currentText) {
     .getElementById("ext-dashboard-memo-edit-popup")
     .querySelector("#ext-dash-popup-delete-btn");
   if (!popup || !input || !saveBtn || !deleteBtn) return;
+
+  const currentText = memoEntry?.memo || "";
+  const currentColor = memoEntry?.color || "blue";
 
   input.value = currentText;
   popup.style.display = "flex";
@@ -459,11 +479,18 @@ function openDashboardMemoPopup(memberId, currentText) {
       return;
     }
     chrome.storage.local.get(["userMemos"], (res) => {
-      const currentMemos = res.userMemos || {};
-      const rawData = currentMemos[memberId] || "";
-      const colorStyle = rawData.includes(":") ? rawData.split(":")[1] : "blue";
-      currentMemos[memberId] = `${updatedText}:${colorStyle}`;
-      chrome.storage.local.set({ userMemos: currentMemos }, () => {
+      const arr = Array.isArray(res.userMemos) ? res.userMemos : [];
+      const dateStr = getTodayDateStr();
+      const filtered = arr.filter(
+        (m) => String(m.member_num) !== String(memberId),
+      );
+      filtered.push({
+        member_num: String(memberId),
+        memo: updatedText,
+        date: dateStr,
+        color: currentColor,
+      });
+      chrome.storage.local.set({ userMemos: filtered }, () => {
         popup.style.display = "none";
         loadDashboardUserMemos();
         refreshActiveTabs();
@@ -472,9 +499,11 @@ function openDashboardMemoPopup(memberId, currentText) {
   });
   newDeleteBtn.addEventListener("click", () => {
     chrome.storage.local.get(["userMemos"], (res) => {
-      const currentMemos = res.userMemos || {};
-      delete currentMemos[memberId];
-      chrome.storage.local.set({ userMemos: currentMemos }, () => {
+      const arr = Array.isArray(res.userMemos) ? res.userMemos : [];
+      const filtered = arr.filter(
+        (m) => String(m.member_num) !== String(memberId),
+      );
+      chrome.storage.local.set({ userMemos: filtered }, () => {
         popup.style.display = "none";
         loadDashboardUserMemos();
         refreshActiveTabs();
@@ -576,17 +605,19 @@ function restoreSettings(event) {
           ? importedData.blocked_users
           : [];
 
+      const importDate = getTodayDateStr();
+
       const keywords = rawKeywords.map((item) => {
         if (typeof item === "string") {
           return {
-            date: "2026/05/19",
+            date: importDate,
             method: "includes",
             target: "all",
             word: item,
           };
         }
         return {
-          date: item.date || "2026/05/19",
+          date: item.date || importDate,
           method: item.method || "includes",
           target: item.target || "all",
           word: item.word || item.keyword,
@@ -597,17 +628,49 @@ function restoreSettings(event) {
         if (typeof item === "string" && item.includes(":")) {
           const parts = item.split(":");
           return {
-            date: "2026/05/19",
+            date: importDate,
             member_num: parts[0].trim(),
             memo: parts[2] ? parts[2].trim() : "",
           };
         }
         return {
-          date: item.date || "2026/05/19",
+          date: item.date || importDate,
           member_num: item.member_num,
           memo: item.memo || "",
         };
       });
+
+      // userMemos import: 구버전 object, 신버전 array 둘 다 처리
+      const rawImportedMemos = importedData.userMemos;
+      let importedUserMemos = [];
+      if (Array.isArray(rawImportedMemos)) {
+        importedUserMemos = rawImportedMemos.map((m) => ({
+          member_num: String(m.member_num),
+          memo: m.memo || "",
+          date: m.date || importDate,
+          color: m.color || "blue",
+        }));
+      } else if (rawImportedMemos && typeof rawImportedMemos === "object") {
+        importedUserMemos = Object.entries(rawImportedMemos).map(
+          ([mid, raw]) => {
+            let memo = raw;
+            let color = "blue";
+            if (typeof raw === "string") {
+              const colonIdx = raw.lastIndexOf(":");
+              if (colonIdx !== -1) {
+                memo = raw.slice(0, colonIdx);
+                color = raw.slice(colonIdx + 1) || "blue";
+              }
+            }
+            return {
+              member_num: mid,
+              memo: memo || "",
+              date: importDate,
+              color,
+            };
+          },
+        );
+      }
 
       chrome.storage.local.get(
         [
@@ -658,7 +721,6 @@ function restoreSettings(event) {
             typeof currentSettings.blockMethod === "string"
               ? currentSettings.blockMethod
               : "remove";
-          const userMemos = currentSettings.userMemos || {};
           chrome.storage.local.set(
             {
               keywords,
@@ -673,7 +735,7 @@ function restoreSettings(event) {
               preventYoutubeAlgorithm,
               contentWidth,
               blockMethod,
-              userMemos,
+              userMemos: importedUserMemos,
             },
             () => {
               alert("🎉 순정 백업 데이터 복원을 완료했습니다!");
@@ -743,9 +805,11 @@ function restoreFromDogdripPlusPlus(event) {
         ? targetJson.keywords
         : [];
 
+      const importDate2 = getTodayDateStr();
+
       const convertedUsers = rawTargetMembers.map((item) => {
         return {
-          date: item.date || "2026/05/19",
+          date: item.date || importDate2,
           member_num: String(item.member_num).trim(),
           memo: item.memo || "",
         };
@@ -753,7 +817,7 @@ function restoreFromDogdripPlusPlus(event) {
 
       const convertedKeywords = rawTargetKeywords.map((item) => {
         return {
-          date: item.date || "2026/05/19",
+          date: item.date || importDate2,
           method: item.method || "includes",
           target: item.target || "all",
           word: item.keyword,
@@ -813,7 +877,9 @@ function restoreFromDogdripPlusPlus(event) {
             typeof currentSettings.blockMethod === "string"
               ? currentSettings.blockMethod
               : "remove";
-          const userMemos = currentSettings.userMemos || {};
+          const userMemos = Array.isArray(currentSettings.userMemos)
+            ? currentSettings.userMemos
+            : [];
 
           chrome.storage.local.set(
             {
@@ -859,6 +925,40 @@ function restoreFromDogdripPlusPlus(event) {
 /* =========================================================================
    🔑 [NEW 코어] 대시보드 키워드 상세 조건 매칭/타겟 핸들러 및 원격 노드 스케줄러
    ========================================================================= */
+function addNewKeywordObjectItem() {
+  const wordInput = document.getElementById("ext-new-keyword-input");
+  const methodSelect = document.getElementById("ext-new-keyword-method");
+  const targetSelect = document.getElementById("ext-new-keyword-target");
+  if (!wordInput) return;
+
+  const word = wordInput.value.trim();
+  if (!word) {
+    wordInput.focus();
+    return;
+  }
+
+  const method = methodSelect ? methodSelect.value : "includes";
+  const target = targetSelect ? targetSelect.value : "all";
+  const dateStr = getTodayDateStr();
+
+  chrome.storage.local.get(["keywords"], (result) => {
+    const keywords = result.keywords || [];
+    const isDuplicate = keywords.some(
+      (kw) => (kw.word || kw.keyword || "") === word,
+    );
+    if (isDuplicate) {
+      alert(`"${word}" 키워드는 이미 등록되어 있습니다.`);
+      return;
+    }
+    keywords.push({ date: dateStr, method, target, word });
+    chrome.storage.local.set({ keywords }, () => {
+      wordInput.value = "";
+      loadData("keywords", "keyword-list");
+      refreshActiveTabs();
+    });
+  });
+}
+
 function openDashboardKeywordEditPopup(keywordObj) {
   const popup = document.getElementById("ext-dashboard-keyword-edit-popup");
   const wordInput = document.getElementById("ext-keyword-popup-word-input");
@@ -909,7 +1009,7 @@ function openDashboardKeywordEditPopup(keywordObj) {
         const checkWord = kw.word || kw.keyword || "";
         if (checkWord === originalWord) {
           return {
-            date: kw.date || "2026/05/19",
+            date: kw.date || getTodayDateStr(),
             method: methodSelect.value,
             target: targetSelect.value,
             word: nextWord,

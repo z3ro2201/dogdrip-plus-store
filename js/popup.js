@@ -5,6 +5,12 @@
 var COOKIE_URL = "https://www.dogdrip.net";
 var TXT_COOKIE_NAME = "txtmode";
 var THEME_COOKIE_NAME = "theme";
+var COLOR_CHEME_COOKIE_QK = "rx_color_scheme";
+
+function getTodayDateStr() {
+  const d = new Date();
+  return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, "0")}/${String(d.getDate()).padStart(2, "0")}`;
+}
 
 // 1. 팝업창 오픈 시 설정 데이터 로드 및 UI 복원
 document.addEventListener("DOMContentLoaded", () => {
@@ -21,7 +27,9 @@ document.addEventListener("DOMContentLoaded", () => {
       "disableVote",
       "preventYoutubeAlgorithm",
       "contentWidth",
-      "blockMethod", // 💡 차단 방식 데이터 로드 대상 통합
+      "blockMethod",
+      "readabilityMode",
+      "legacyToolbar",
     ],
     (result) => {
       const isCompact = result.compactMode || false;
@@ -37,6 +45,10 @@ document.addEventListener("DOMContentLoaded", () => {
         result.disableVote || false;
       document.getElementById("preventYoutubeAlgorithm").checked =
         result.preventYoutubeAlgorithm || false;
+      document.getElementById("readability-mode-cb").checked =
+        result.readabilityMode || false;
+      document.getElementById("legacy-toolbar-cb").checked =
+        result.legacyToolbar || false;
 
       // 📐 가변 폭 초기 값 매핑
       document.getElementById("content-width-input").value =
@@ -46,6 +58,8 @@ document.addEventListener("DOMContentLoaded", () => {
       const method = result.blockMethod || "remove";
       if (method === "blind") {
         document.getElementById("block-method-blind").checked = true;
+      } else if (method === "badge") {
+        document.getElementById("block-method-badge").checked = true;
       } else {
         document.getElementById("block-method-remove").checked = true;
       }
@@ -99,6 +113,16 @@ document
   .getElementById("disable-vote-cb")
   .addEventListener("change", (e) =>
     handleCheckboxChange("disableVote", e.target.checked),
+  );
+document
+  .getElementById("readability-mode-cb")
+  .addEventListener("change", (e) =>
+    handleCheckboxChange("readabilityMode", e.target.checked),
+  );
+document
+  .getElementById("legacy-toolbar-cb")
+  .addEventListener("change", (e) =>
+    handleCheckboxChange("legacyToolbar", e.target.checked),
   );
 document
   .getElementById("preventYoutubeAlgorithm")
@@ -265,6 +289,13 @@ function checkCookieStatus() {
           switchEl.checked = !!(cookie && cookie.value === "1");
         },
       );
+
+      chrome.cookies.get(
+        { url: COOKIE_URL, name: COLOR_CHEME_COOKIE_QK },
+        (cookie) => {
+          switchEl.checked = !!(cookie && cookie.value === "light");
+        },
+      );
     },
   );
 }
@@ -311,14 +342,33 @@ function checkThemeCookieStatus() {
 function toggleThemeCookie() {
   chrome.cookies.get({ url: COOKIE_URL, name: THEME_COOKIE_NAME }, (cookie) => {
     let newValue = "b";
+    let themeValue = "dark";
     if (cookie && cookie.value === "b") {
       newValue = "a";
+      themeValue = "light";
     }
+
     chrome.cookies.set(
       {
         url: "https://www.dogdrip.net",
         name: THEME_COOKIE_NAME,
         value: newValue,
+        path: "/",
+        secure: true,
+        sameSite: "no_restriction",
+        expirationDate: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+      },
+      () => {
+        checkThemeCookieStatus();
+        refreshActiveTab();
+      },
+    );
+
+    chrome.cookies.set(
+      {
+        url: "https://www.dogdrip.net",
+        name: COLOR_CHEME_COOKIE_QK,
+        value: themeValue,
         path: "/",
         secure: true,
         sameSite: "no_restriction",
@@ -366,9 +416,9 @@ function addListItem(key, inputId) {
     if (!isAlreadyExist) {
       // 📦 빠른 차단창에서 고른 콤보박스 설정값과 함께 마스터 규격 문자열 구조체 생성
       const newQuickKeywordObj = {
-        date: "2026/05/19",
-        method: methodEl.value, // includes, starts
-        target: targetEl.value, // all, comments, posts
+        date: getTodayDateStr(),
+        method: methodEl.value,
+        target: targetEl.value,
         word: value,
       };
 
