@@ -374,7 +374,7 @@ html.ddnad {
 
 .eq.navbar.primary .eq.navbar-nav > li > a {
   font-size: 14.5px;
-  font-weight: 400;
+  font-weight: 300;
 }
 .eq.navbar.primary .eq.navbar-nav > li.active > a {
   color: #fff !important;
@@ -629,8 +629,8 @@ html.ext-readability-mode cite,
 html.ext-readability-mode .ed:not(.fa):not(.fas):not(.far):not(.fab),
 html.ext-readability-mode .ed *:not(.fa):not(.fas):not(.far):not(.fab) {
   font-family:
-    "Pretendard JP",
     "Pretendard",
+    "Pretendard JP",
     -apple-system,
     BlinkMacSystemFont,
     system-ui,
