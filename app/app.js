@@ -1591,8 +1591,8 @@ function _buildQuickPanel() {
   const panel = document.createElement("div");
   panel.id = "ext-quick-panel";
 
-  // 공통 버튼 정의
-  const commonBtns = [
+  // 공통 버튼 정의 (페이지 컨트롤)
+  const commonPageControlBtns = [
     {
       id: "extqk-top",
       icon: "fas fa-arrow-up",
@@ -1608,24 +1608,6 @@ function _buildQuickPanel() {
           top: document.body.scrollHeight,
           behavior: "smooth",
         }),
-    },
-    {
-      id: "extqk-readability",
-      icon: "fas fa-book-open",
-      tooltip: "가독성 모드",
-      onClick: () => toggleReadabilityMode(),
-    },
-    {
-      id: "extqk-dogcon",
-      icon: "far fa-smile-wink",
-      tooltip: "개드립콘 절약",
-      onClick: () => toggleTxtModeQk(),
-    },
-    {
-      id: "extqk-dark",
-      icon: "fas fa-sun",
-      tooltip: "다크모드",
-      onClick: () => toggleThemeQk(),
     },
   ];
 
@@ -1660,7 +1642,31 @@ function _buildQuickPanel() {
     },
   ];
 
-  const buttons = isPost ? [...commonBtns, ...postBtns] : commonBtns;
+  // 공통 도구 모음
+  const commonToolsBtns = [
+    {
+      id: "extqk-readability",
+      icon: "fas fa-book-open",
+      tooltip: "가독성 모드",
+      onClick: () => toggleReadabilityMode(),
+    },
+    {
+      id: "extqk-dogcon",
+      icon: "far fa-smile-wink",
+      tooltip: "개드립콘 절약",
+      onClick: () => toggleTxtModeQk(),
+    },
+    {
+      id: "extqk-dark",
+      icon: "fas fa-sun",
+      tooltip: "다크모드",
+      onClick: () => toggleThemeQk(),
+    },
+  ];
+
+  const buttons = isPost
+    ? [...commonPageControlBtns, ...postBtns, ...commonToolsBtns]
+    : [...commonPageControlBtns, ...commonToolsBtns];
 
   buttons.forEach(({ id, icon, tooltip, onClick }) => {
     const btn = document.createElement("button");
